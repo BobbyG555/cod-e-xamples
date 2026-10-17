@@ -1,0 +1,148 @@
+
+local replicatedstorage = game:GetService("ReplicatedStorage")
+local players = game:GetService("Players")
+local tweenservice = game:GetService("TweenService")
+
+local spawner = script.Parent
+
+local spawn_cooldown = false
+local cooldown_time = 30
+local player_cooldown = 10
+
+local playerTimes = {}
+
+local normal_colour = Color3.fromRGB(255, 186, 38)
+local off_colour = Color3.fromRGB(74, 83, 88)
+
+local car_name = "Top"
+local spawn_distance = 10
+local car_rotation = -90
+
+local cars_spawned = 0
+local isWorking = true
+
+spawner.Color = normal_colour
+
+-- TODO: what if someone with the extra speed pass comes past really fast and collides with your car? maybe make them non colliding
+
+-- gets player from touching part
+local function get_player(hit)
+    local char = hit.Parent
+    if not char then return nil end
+
+    local hum = char:FindFirstChild("Humanoid")
+    if not hum then return nil end
+
+    local plr = players:GetPlayerFromCharacter(char)
+    return plr
+end
+
+-- changes the spawner colour
+local function change_colour(colour)
+    local info = TweenInfo.new(0.4, Enum.EasingStyle.Linear)
+
+    local colourTween = tweenservice:Create(spawner, info, {
+        Color = colour
+    })
+
+    colourTween:Play()
+end
+
+-- checks if player can spawn
+local function can_spawn(plr)
+    if spawn_cooldown or not isWorking then
+        return false
+    end
+
+    local userid = plr.UserId
+    local last_time = playerTimes[userid]
+
+    if last_time then
+        local time_passed = os.time() - last_time
+
+        if time_passed < player_cooldown then
+            print("player is still on cooldown")
+            return false
+        end
+    end
+
+    return true
+end
+
+-- spawns the car
+local function spawn_car(plr)
+    local car = replicatedstorage:FindFirstChild(car_name)
+
+    if not car then
+        warn("car couldnt be found")
+        return false
+    end
+
+    local newCar = car:Clone()
+    newCar.Parent = spawner.Parent
+
+    local forward = spawner.CFrame.LookVector
+    local spawn_pos = spawner.Position + forward * spawn_distance
+
+    -- rotates car to correct direction
+    local car_cf = CFrame.new(spawn_pos, spawn_pos + forward)
+    local rotation = CFrame.Angles(0, math.rad(car_rotation), 0)
+
+    car_cf = car_cf * rotation
+
+    if newCar.PrimaryPart then
+        newCar:PivotTo(car_cf)
+    else
+        -- works without pivoto
+        newCar:PivotTo(car_cf)
+    end
+
+    cars_spawned += 1
+
+    print("spawned car number " .. cars_spawned)
+    print(plr.Name .. " spawned a car")
+
+    return true
+end
+
+-- resets spawner after cooldown
+local function reset_spawner()
+    task.wait(cooldown_time)
+
+    spawn_cooldown = false
+    isWorking = true
+
+    change_colour(normal_colour)
+    print("spawner ready again")
+end
+
+-- main touch event
+spawner.Touched:Connect(function(hit)
+    local plr = get_player(hit)
+    if not plr then return end
+
+    if not can_spawn(plr) then return end
+
+    spawn_cooldown = true
+    isWorking = false
+
+    playerTimes[plr.UserId] = os.time()
+    change_colour(off_colour)
+
+    local did_spawn = spawn_car(plr)
+
+    if did_spawn then
+        print("car spawned succesfully")
+    else
+        warn("something went wrong spawning the car")
+    end
+
+    task.spawn(function()
+        reset_spawner()
+    end)
+end)
+
+-- clears cooldown when player leaves
+players.PlayerRemoving:Connect(function(plr)
+    playerTimes[plr.UserId] = nil
+end)
