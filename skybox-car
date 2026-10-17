@@ -1,0 +1,139 @@
+
+local model = script.Parent
+local guib = model:WaitForChild("Guib")
+local clickDetector = guib:WaitForChild("ClickDetector")
+
+local runService = game:GetService("RunService")
+local marketplace = game:GetService("MarketplaceService")
+local players = game:GetService("Players")
+
+local GAMEPASS_ID = 1581389740
+
+local default_speed = -1000
+local pass_speed = -2000
+
+local acelleration = 1500
+local launch_delay = 0.5
+local click_cooldown = 3
+
+local isMoving = false
+local isLaunching = false
+local current_speed = 0
+local max_speed = default_speed
+
+local last_click = 0
+local ownershipCache = {}
+
+clickDetector.MaxActivationDistance = 10
+
+-- gets the sound if there is one
+local launch_sound = guib:FindFirstChild("LaunchSound")
+
+-- checks if player owns gamepsas
+local function playerHasPass(plr)
+
+    if ownershipCache[plr.UserId] ~= nil then
+        return ownershipCache[plr.UserId]
+    end
+
+    local success, owns = pcall(function()
+        return marketplace:UserOwnsGamePassAsync(
+            plr.UserId,
+            GAMEPASS_ID
+        )
+    end)
+
+    if success then
+        ownershipCache[plr.UserId] = owns
+        return owns
+    else
+        warn("Failed to check gamepass for " .. plr.Name)
+        return false
+    end
+end
+
+-- updates gamepass when purchased
+marketplace.PromptGamePassPurchaseFinished:Connect(function(plr, passId, bought)
+
+    if passId == GAMEPASS_ID and bought then
+        ownershipCache[plr.UserId] = true
+
+        print(plr.Name .. " purchased the speed gamepass!")
+    end
+
+end)
+
+-- clears cache when player leaves
+players.PlayerRemoving:Connect(function(plr)
+    ownershipCache[plr.UserId] = nil
+end)
+
+-- launches the car
+local function launch_car(plr)
+
+    local current_time = os.clock()
+
+    -- stops clicking too fast
+    if current_time - last_click < click_cooldown then
+        return
+    end
+
+    if isLaunching or isMoving then
+        return
+    end
+
+    last_click = current_time
+    isLaunching = true
+
+    print(plr.Name .. " is launching the car!")
+
+    -- checks gamepass speed
+    if playerHasPass(plr) then
+        max_speed = pass_speed
+        print("Gamepass speed enabled!")
+    else
+        max_speed = default_speed
+        print("Using normal speed")
+    end
+
+    -- plays launch sound
+    if launch_sound and launch_sound:IsA("Sound") then
+        launch_sound:Play()
+    end
+
+    -- small delay before launching
+    task.wait(launch_delay)
+
+    current_speed = 0
+    isMoving = true
+    isLaunching = false
+
+    print("Car launched!")
+
+end
+
+clickDetector.MouseClick:Connect(launch_car)
+
+-- moves the car with smooth acelleration
+runService.Heartbeat:Connect(function(dt)
+
+    if not isMoving then
+        return
+    end
+
+    -- slowly increases speed using acelleration
+    if current_speed > max_speed then
+        current_speed = math.max(
+            current_speed - acelleration * dt,
+            max_speed
+        )
+    end
+
+    local move_amount = current_speed * dt
+
+    -- moves the entire model together
+    model:PivotTo(
+        model:GetPivot() * CFrame.new(move_amount, 0, 0)
+    )
+
+end)
