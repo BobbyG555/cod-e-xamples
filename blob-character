@@ -26,7 +26,6 @@ local function get_blob_size(mass)
     return math.clamp(size, starting_size, max_blob_size)
 end
 
--- changes blob size and walking speed
 local function update_blob(plr, char)
     local blob = char:FindFirstChild("BlobBody")
     local hum = char:FindFirstChild("Humanoid")
